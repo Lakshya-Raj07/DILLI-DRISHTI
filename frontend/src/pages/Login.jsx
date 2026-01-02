@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, ShieldCheck, Landmark } from 'lucide-react';
 
-const Login = () => {
+const Login = ({ setUserRole }) => {
   const [role, setRole] = useState('worker');
   const [empId, setEmpId] = useState('');
   const navigate = useNavigate();
@@ -10,11 +10,19 @@ const Login = () => {
   const handleLogin = (e) => {
     e.preventDefault();
     
-    // Role-based Redirection Logic
-    if (role === 'admin') navigate('/admin');
-    else if (role === 'zonal') navigate('/zonal');
-    else if (role === 'supervisor') navigate('/supervisor');
-    else navigate('/worker');
+    // Step 1: Update Global Auth State (Yeh fix hai)
+    setUserRole(role);
+    
+    // Step 2: Role-based Redirection
+    if (role === 'admin') {
+      navigate('/admin');
+    } else if (role === 'zonal') {
+      navigate('/zonal');
+    } else if (role === 'supervisor') {
+      navigate('/supervisor');
+    } else {
+      navigate('/worker');
+    }
   };
 
   return (
@@ -98,7 +106,7 @@ const Login = () => {
           {/* Security Disclaimer */}
           <div className="mt-10 pt-6 border-t border-gray-100 text-center">
              <p className="text-[9px] text-gray-400 font-bold uppercase leading-relaxed">
-               Warning: Unauthorized access to this portal is strictly prohibited and monitored under the IT Act 2026.
+                Warning: Unauthorized access to this portal is strictly prohibited and monitored under the IT Act 2026.
              </p>
           </div>
         </div>
