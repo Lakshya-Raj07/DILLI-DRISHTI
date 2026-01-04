@@ -5,6 +5,7 @@ DROP TABLE IF EXISTS ping_logs CASCADE;
 DROP TABLE IF EXISTS attendance_logs CASCADE;
 DROP TABLE IF EXISTS employees CASCADE;
 DROP TABLE IF EXISTS wards CASCADE;
+DROP TABLE IF EXISTS audit_logs CASCADE;
 
 
 -- 2. WARDS TABLE: Digital Geofencing Boundaries
@@ -21,31 +22,32 @@ CREATE TABLE wards (
 -- 3. EMPLOYEES TABLE: Global Personnel Registry
 
 CREATE TABLE employees (
-    id               SERIAL PRIMARY KEY,
-    name             VARCHAR(100) NOT NULL,
-    role             VARCHAR(50) DEFAULT 'worker', -- roles: 'admin', 'zonal', 'supervisor', 'worker'
-    ward_id          INT REFERENCES wards(id) ON DELETE SET NULL,
-    integrity_score  DECIMAL(5,2) DEFAULT 100.00,
-    phone_number     VARCHAR(15) UNIQUE NOT NULL,
+    id              SERIAL PRIMARY KEY,
+    name            VARCHAR(100) NOT NULL,
+    role            VARCHAR(50) DEFAULT 'worker', -- roles: 'admin', 'zonal', 'supervisor', 'worker'
+    ward_id         INT REFERENCES wards(id) ON DELETE SET NULL,
+    integrity_score DECIMAL(5,2) DEFAULT 100.00,
+    phone_number    VARCHAR(15) UNIQUE NOT NULL,
     attendance_count INT DEFAULT 0,
-    is_ping_active   BOOLEAN DEFAULT FALSE,
-    base_salary      DECIMAL(10, 2) DEFAULT 25000.00,
-    current_otp      VARCHAR(6) DEFAULT NULL,
-    last_login       TIMESTAMPTZ DEFAULT NOW()
+    is_ping_active  BOOLEAN DEFAULT FALSE,
+    base_salary     DECIMAL(10, 2) DEFAULT 25000.00,
+    current_otp     VARCHAR(6) DEFAULT NULL,
+    last_login      TIMESTAMPTZ DEFAULT NOW(),
+    device_id       VARCHAR(255) DEFAULT NULL
 );
 
 
 -- 4. ATTENDANCE LOGS: Immutable Security Ledger
 
 CREATE TABLE attendance_logs (
-    id               SERIAL PRIMARY KEY,
-    emp_id           INT REFERENCES employees(id) ON DELETE CASCADE,
-    check_in_time    TIMESTAMPTZ DEFAULT NOW(),
-    lat              DECIMAL(10, 8),
-    lng              DECIMAL(11, 8),
-    status           VARCHAR(20), -- 'SUCCESS' / 'BLOCKED'
+    id              SERIAL PRIMARY KEY,
+    emp_id          INT REFERENCES employees(id) ON DELETE CASCADE,
+    check_in_time   TIMESTAMPTZ DEFAULT NOW(),
+    lat             DECIMAL(10, 8),
+    lng             DECIMAL(11, 8),
+    status          VARCHAR(20), -- 'SUCCESS' / 'BLOCKED'
     face_match_score DECIMAL(5, 2),
-    fail_reason      TEXT
+    fail_reason     TEXT
 );
 
 
@@ -69,6 +71,18 @@ CREATE TABLE salary_ledger (
     month_year   VARCHAR(20), -- e.g., 'Jan-2026'
     status       VARCHAR(20) DEFAULT 'PENDING', -- 'PENDING', 'VERIFIED'
     verified_at  TIMESTAMPTZ
+);
+
+
+-- 7. AUDIT LOGS: System Wide Security & Hash Logs
+
+CREATE TABLE audit_logs (
+    id           SERIAL PRIMARY KEY,
+    action_type  VARCHAR(50),
+    record_id    INT,
+    payload      TEXT,
+    sha256_hash  TEXT,
+    created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
 
