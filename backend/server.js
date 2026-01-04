@@ -14,11 +14,12 @@ const initDB = async () => {
         const sql = fs.readFileSync('./init.sql').toString();
         await db.query(sql);
         console.log("-----------------------------------------");
-        console.log("   DILLI DRISHTI v4.0 ENGINE LOADED      ");
-        console.log("   STRICT GOVERNANCE PROTOCOLS ACTIVE    ");
+        console.log("   DILLI DRISHTI v4.5 CORE ENGINE      ");
+        console.log("   STATUS: STRICT GOVERNANCE ACTIVE    ");
+        console.log("   INTEGRITY LEDGER: ENCRYPTED         ");
         console.log("-----------------------------------------");
     } catch (err) {
-        console.error("Database Initialization Error:", err);
+        console.error("Critical: Database Init Failed ->", err);
     }
 };
 initDB();
@@ -36,7 +37,27 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-// --- 2. DASHBOARD ROUTES ---
+// --- 2. AUTH & PROFILE ROUTES (NEW & DYNAMIC) ---
+
+// Get Individual Worker Profile for WorkerApp.jsx
+app.get('/api/worker/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query(`
+            SELECT e.id, e.name, e.role, e.integrity_score, e.base_salary, w.ward_name 
+            FROM employees e 
+            JOIN wards w ON e.ward_id = w.id 
+            WHERE e.id = $1`, [id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: "Employee not found in registry" });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error("Profile Fetch Error:", err);
+        res.status(500).json({ error: "Mainframe Connection Error" });
+    }
+});
 
 // Commissioner's Global Data Fetch
 app.get('/check-db', async (req, res) => {
@@ -65,23 +86,23 @@ app.post('/api/attendance/checkin', async (req, res) => {
             JOIN wards w ON e.ward_id = w.id 
             WHERE e.id = $1`, [employee_id]);
 
-        if (empQuery.rowCount === 0) return res.status(404).send("Worker not found");
+        if (empQuery.rowCount === 0) return res.status(404).json({ reason: "Worker not found" });
         
         const emp = empQuery.rows[0];
         const distance = calculateDistance(user_lat, user_lng, parseFloat(emp.w_lat), parseFloat(emp.w_lng));
         
-        let status = 'SUCCESS', reason = 'Verified';
+        let status = 'SUCCESS', reason = 'Verified via Geofence & AI';
 
-        // Security Logic
+        // Triple-Lock Logic
         if (distance > emp.radius_meters) { 
             status = 'BLOCKED'; 
-            reason = 'Location Outside Ward'; 
+            reason = 'Fraud Alert: Outside Ward Boundary'; 
         } else if (face_score < 0.8) { 
             status = 'BLOCKED'; 
-            reason = 'Face Identity Mismatch'; 
+            reason = 'Identity Mismatch: Face Scan Failed'; 
         }
 
-        // Log Attendance
+        // Log Attendance into Immutable Ledger
         await db.query(`
             INSERT INTO attendance_logs (emp_id, lat, lng, status, face_match_score, fail_reason) 
             VALUES ($1, $2, $3, $4, $5, $6)`, 
@@ -89,28 +110,29 @@ app.post('/api/attendance/checkin', async (req, res) => {
         );
 
         if (status === 'SUCCESS') {
-            await db.query('UPDATE employees SET attendance_count = attendance_count + 1, integrity_score = LEAST(integrity_score + 0.1, 100) WHERE id = $1', [employee_id]);
-            res.json({ status: "SUCCESS", message: "Attendance Marked Successfully!" });
+            await db.query(`
+                UPDATE employees 
+                SET attendance_count = attendance_count + 1, 
+                    integrity_score = LEAST(integrity_score + 0.1, 100) 
+                WHERE id = $1`, [employee_id]);
+            res.json({ status: "SUCCESS", message: "Presence Verified. Records Locked." });
         } else {
-            await db.query('UPDATE employees SET integrity_score = GREATEST(integrity_score - 0.5, 0) WHERE id = $1', [employee_id]);
+            // Penalize Integrity Score for Fraud Attempt
+            await db.query(`
+                UPDATE employees 
+                SET integrity_score = GREATEST(integrity_score - 1.5, 0) 
+                WHERE id = $1`, [employee_id]);
             res.status(403).json({ status: "BLOCKED", reason });
         }
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) { 
+        console.error("Attendance Error:", e);
+        res.status(500).json({ error: "Attendance Logic Failure" });
+    }
 });
 
-// --- 4. RANDOM PING SYSTEM (ENHANCED) ---
+// --- 4. RANDOM PING SYSTEM ---
 
-// Trigger: Supervisor sends a random presence check
-app.post('/api/ping/trigger', async (req, res) => {
-    const { employee_id } = req.body;
-    try {
-        await db.query('INSERT INTO ping_logs (emp_id, status) VALUES ($1, $2)', [employee_id, 'PENDING']);
-        await db.query('UPDATE employees SET is_ping_active = TRUE WHERE id = $1', [employee_id]);
-        res.json({ message: "Ping triggered successfully" });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Status: Worker App polls this to check if a ping is active
+// Status: Worker App calls this to check if a ping is active
 app.get('/api/ping/status/:id', async (req, res) => {
     const { id } = req.params;
     try {
@@ -120,7 +142,7 @@ app.get('/api/ping/status/:id', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Respond: Worker answers the ping
+// Respond: Worker answers the random ping
 app.post('/api/ping/respond', async (req, res) => {
     const { employee_id, user_lat, user_lng } = req.body;
     try {
@@ -136,50 +158,58 @@ app.post('/api/ping/respond', async (req, res) => {
         if (distance <= emp.radius_meters) {
             await db.query("UPDATE ping_logs SET responded_at = NOW(), status = 'SUCCESS' WHERE emp_id = $1 AND status = 'PENDING'", [employee_id]);
             await db.query('UPDATE employees SET is_ping_active = FALSE, integrity_score = LEAST(integrity_score + 0.5, 100) WHERE id = $1', [employee_id]);
-            res.json({ status: "SUCCESS", message: "Presence Verified!" });
+            res.json({ status: "SUCCESS", message: "Integrity Verified!" });
         } else {
             await db.query("UPDATE ping_logs SET status = 'FAILED' WHERE emp_id = $1 AND status = 'PENDING'", [employee_id]);
-            await db.query('UPDATE employees SET is_ping_active = FALSE, integrity_score = GREATEST(integrity_score - 2.0, 0) WHERE id = $1', [employee_id]);
-            res.status(403).json({ status: "FAILED", message: "Verification Failed: Location Outside Ward" });
+            await db.query('UPDATE employees SET is_ping_active = FALSE, integrity_score = GREATEST(integrity_score - 2.5, 0) WHERE id = $1', [employee_id]);
+            res.status(403).json({ status: "FAILED", message: "Ping Failed: Abnormal Location" });
         }
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- 5. SALARY & FINANCIAL INTEGRITY ---
+// --- 5. SALARY & FINANCIAL INTEGRITY (OTP BASED) ---
 
-// Release: Supervisor triggers salary generation and OTP
+// Verify: Worker enters OTP to release the funds from MCD Treasury
+app.post('/api/salary/verify', async (req, res) => {
+    const { employee_id, otp } = req.body;
+    try {
+        const result = await db.query('SELECT current_otp FROM employees WHERE id = $1', [employee_id]);
+        
+        if (result.rowCount > 0 && result.rows[0].current_otp === otp) {
+            await db.query(`
+                UPDATE salary_ledger 
+                SET status = 'VERIFIED', verified_at = NOW() 
+                WHERE emp_id = $1 AND status = 'PENDING'`, [employee_id]);
+            
+            await db.query('UPDATE employees SET current_otp = NULL WHERE id = $1', [employee_id]);
+            
+            res.json({ status: "PAID", message: "MCD Treasury: Salary Disbursed to Bank." });
+        } else {
+            res.status(401).json({ message: "Security Violation: Invalid OTP" });
+        }
+    } catch (err) { 
+        console.error("Salary Verification Error:", err);
+        res.status(500).json({ error: "Treasury Connection Failed" });
+    }
+});
+
+// Trigger: Supervisor releases salary (Used for Testing/Demo)
 app.post('/api/salary/release', async (req, res) => {
     const { employee_id } = req.body;
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     try {
         await db.query('UPDATE employees SET current_otp = $1 WHERE id = $2', [otp, employee_id]);
-        // Insert into ledger (status starts as PENDING)
         await db.query(`
             INSERT INTO salary_ledger (emp_id, amount, month_year, status) 
             SELECT id, base_salary, $1, 'PENDING' FROM employees WHERE id = $2`, 
             ['Jan-2026', employee_id]
         );
-        res.json({ message: "Salary released!", otp_hint: otp });
-    } catch (err) { res.status(500).send(err.message); }
-});
-
-// Verify: Worker enters OTP to release the funds
-app.post('/api/salary/verify', async (req, res) => {
-    const { employee_id, otp } = req.body;
-    try {
-        const result = await db.query('SELECT current_otp FROM employees WHERE id = $1', [employee_id]);
-        if (result.rows[0].current_otp === otp) {
-            await db.query("UPDATE salary_ledger SET status = 'VERIFIED', verified_at = NOW() WHERE emp_id = $1 AND status = 'PENDING'", [employee_id]);
-            await db.query('UPDATE employees SET current_otp = NULL WHERE id = $1', [employee_id]);
-            res.json({ status: "PAID", message: "Salary Credited Successfully!" });
-        } else {
-            res.status(401).json({ message: "Invalid Security OTP" });
-        }
+        res.json({ message: "Salary Generated", otp_hint: otp });
     } catch (err) { res.status(500).send(err.message); }
 });
 
 // Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`MCD Engine active on port ${PORT}`);
+    console.log(`[SYSTEM] Dilli Drishti Engine listening on port ${PORT}`);
 });

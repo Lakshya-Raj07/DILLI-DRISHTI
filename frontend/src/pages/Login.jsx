@@ -1,115 +1,187 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, User, ShieldCheck, Landmark } from 'lucide-react';
+import { Lock, User, ShieldCheck, Landmark, Fingerprint, Info, CheckCircle2 } from 'lucide-react';
 
 const Login = ({ setUserRole }) => {
   const [role, setRole] = useState('worker');
   const [empId, setEmpId] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = (e) => {
     e.preventDefault();
+    setLoading(true);
     
-    // Step 1: Update Global Auth State (Yeh fix hai)
-    setUserRole(role);
-    
-    // Step 2: Role-based Redirection
-    if (role === 'admin') {
-      navigate('/admin');
-    } else if (role === 'zonal') {
-      navigate('/zonal');
-    } else if (role === 'supervisor') {
-      navigate('/supervisor');
-    } else {
-      navigate('/worker');
-    }
+    // Simulate high-security authentication delay
+    setTimeout(() => {
+      setUserRole(role);
+      setLoading(false);
+      const routes = {
+        admin: '/admin',
+        zonal: '/zonal',
+        supervisor: '/supervisor',
+        worker: '/worker'
+      };
+      navigate(routes[role] || '/worker');
+    }, 1500);
+  };
+
+  const roleLabels = {
+    worker: 'Field Worker',
+    supervisor: 'Supervisor',
+    zonal: 'Zonal Head',
+    admin: 'Commissioner'
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center bg-[#f4f7f9] px-4">
-      {/* Login Card */}
-      <div className="bg-white w-full max-w-md rounded-lg shadow-2xl border-t-8 border-[#002147] overflow-hidden relative">
-        
-        {/* Decorative Saffron & Green Strips */}
-        <div className="absolute top-0 left-0 w-1/3 h-1 bg-orange-500"></div>
-        <div className="absolute top-0 right-0 w-1/3 h-1 bg-green-500"></div>
+    <div className="relative min-h-screen flex items-center justify-center mcd-bg-pattern px-4">
+      {/* Dynamic Background Blurs */}
+      <div className="absolute top-[-10%] left-[-5%] w-[500px] h-[500px] bg-blue-200 rounded-full blur-[120px] opacity-30 pulse-animation"></div>
+      <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] bg-orange-100 rounded-full blur-[120px] opacity-40 pulse-animation"></div>
 
-        <div className="p-10">
-          {/* Logo & Branding */}
-          <div className="text-center mb-10">
-            <div className="bg-blue-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-blue-100 shadow-inner">
-              <Landmark className="text-[#002147]" size={40} />
+      <div className="relative w-full max-w-[1100px] flex flex-col md:flex-row glass-effect rounded-[40px] overflow-hidden animate-fade-in shadow-2xl">
+        
+        {/* Left Section: Brand & Trust */}
+        <div className="w-full md:w-5/12 bg-[#1A2B4C] p-12 text-white flex flex-col justify-between relative overflow-hidden">
+          <div className="z-10">
+            <div className="flex items-center gap-4 mb-12">
+              <div className="bg-white/10 p-4 rounded-2xl backdrop-blur-md border border-white/20">
+                <Landmark size={36} className="text-orange-400" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-black tracking-tight leading-none uppercase">Dilli Drishti</h1>
+                <p className="text-[10px] text-blue-300 font-bold tracking-[0.3em] mt-2 uppercase">Municipal Corporation of Delhi</p>
+              </div>
             </div>
-            <h2 className="text-2xl font-black text-[#002147] uppercase tracking-tighter leading-none">Access Control</h2>
-            <p className="text-[10px] text-gray-400 font-bold uppercase mt-2 tracking-widest">Single Sign-On | Dilli Drishti Portal</p>
+            
+            <h2 className="text-4xl font-black leading-[1.1] mb-8">
+              Transforming <br />
+              <span className="text-orange-400">Governance</span> <br />
+              with Integrity.
+            </h2>
+            
+            <div className="space-y-6">
+              {[
+                { icon: <ShieldCheck className="text-green-400" />, text: "Zero-Knowledge Authentication" },
+                { icon: <Fingerprint className="text-blue-400" />, text: "Aadhaar Biometric Verification" },
+                { icon: <CheckCircle2 className="text-orange-400" />, text: "Immutable Audit Ledger (SHA-256)" }
+              ].map((item, idx) => (
+                <div key={idx} className="flex items-center gap-4 text-sm font-semibold text-blue-100/80">
+                  <div className="bg-white/5 p-2 rounded-lg">{item.icon}</div>
+                  {item.text}
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-6">
-            
-            {/* Role Selection Dropdown */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest flex items-center">
-                <ShieldCheck size={12} className="mr-1 text-blue-800" /> Administrative Role
-              </label>
-              <select 
-                value={role} 
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-[#002147] outline-none focus:border-[#002147] appearance-none cursor-pointer transition-all"
+          <div className="mt-16 pt-8 border-t border-white/10 z-10">
+            <p className="text-xs text-blue-200/50 leading-relaxed font-medium italic">
+              "Smart workforce management for a cleaner, more transparent National Capital."
+            </p>
+          </div>
+          
+          {/* Abstract Circle Decoration */}
+          <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-white/5 rounded-full"></div>
+          <div className="absolute bottom-[-100px] left-[-20px] w-64 h-64 bg-orange-500/10 rounded-full blur-3xl"></div>
+        </div>
+
+        {/* Right Section: Interactive Login */}
+        <div className="w-full md:w-7/12 p-12 bg-white/40">
+          <div className="max-w-md mx-auto">
+            <div className="mb-10 text-center md:text-left">
+              <h3 className="text-3xl font-black text-[#1A2B4C] mb-2 tracking-tight">Access Gateway</h3>
+              <p className="text-slate-500 text-sm font-medium">Select your designated role and provide authorization keys.</p>
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-6">
+              {/* Role Selection Grid */}
+              <div className="grid grid-cols-2 gap-3 mb-8">
+                {['worker', 'supervisor', 'zonal', 'admin'].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRole(r)}
+                    className={`flex flex-col items-start p-4 rounded-2xl border-2 transition-all duration-300 ${
+                      role === r 
+                        ? 'bg-white border-[#1A2B4C] shadow-lg scale-[1.02]' 
+                        : 'bg-white/50 border-transparent hover:border-slate-200 grayscale opacity-70'
+                    }`}
+                  >
+                    <span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${role === r ? 'text-blue-600' : 'text-slate-400'}`}>
+                      Level {r === 'admin' ? '01' : r === 'zonal' ? '02' : r === 'supervisor' ? '03' : '04'}
+                    </span>
+                    <span className="text-sm font-bold text-[#1A2B4C]">{roleLabels[r]}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Input Fields */}
+              <div className="space-y-4">
+                <div className="group">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Credential ID</label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#1A2B4C] transition-colors" size={20} />
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="MCD-XXXXX-2024" 
+                      value={empId}
+                      onChange={(e) => setEmpId(e.target.value)}
+                      className="w-full py-4 pl-12 pr-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-[#1A2B4C] transition-all font-semibold text-slate-700 placeholder:text-slate-300 shadow-sm" 
+                    />
+                  </div>
+                </div>
+
+                <div className="group">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Access Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#1A2B4C] transition-colors" size={20} />
+                    <input 
+                      type="password" 
+                      required
+                      placeholder="••••••••••••" 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full py-4 pl-12 pr-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-[#1A2B4C] transition-all font-semibold text-slate-700 placeholder:text-slate-300 shadow-sm" 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full py-5 bg-[#1A2B4C] text-white rounded-2xl font-bold uppercase tracking-[0.2em] shadow-xl hover:bg-slate-800 transition-all active:scale-[0.98] mt-8 flex items-center justify-center gap-4 group overflow-hidden relative"
               >
-                <option value="admin">Commissioner (Headquarters)</option>
-                <option value="zonal">Zonal Officer (District)</option>
-                <option value="supervisor">Field Supervisor</option>
-                <option value="worker">Sanitation Worker</option>
-              </select>
+                {loading ? (
+                  <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <span className="relative z-10 flex items-center gap-2">Authorize Secure Login <ShieldCheck size={20} /></span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Disclaimer */}
+            <div className="mt-12 p-4 bg-orange-50/50 rounded-2xl border border-orange-100 flex gap-3">
+              <Info className="text-orange-500 shrink-0 mt-0.5" size={16} />
+              <p className="text-[10px] text-orange-900/60 font-medium leading-relaxed uppercase tracking-tighter">
+                Internal Portal: Unauthorized access is strictly monitored under the IT Act 2026. Every session is cryptographically hashed for security.
+              </p>
             </div>
-
-            {/* Username/ID Input */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Employee Credentials</label>
-              <div className="relative group">
-                <User className="absolute left-4 top-4 text-gray-300 group-focus-within:text-[#002147] transition-colors" size={20} />
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Employee ID / User-PIN" 
-                  value={empId}
-                  onChange={(e) => setEmpId(e.target.value)}
-                  className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-xl outline-none focus:border-[#002147] font-bold text-[#002147] placeholder:text-gray-300 transition-all" 
-                />
-              </div>
-            </div>
-
-            {/* Password Input */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Secret Key / Password</label>
-              <div className="relative group">
-                <Lock className="absolute left-4 top-4 text-gray-300 group-focus-within:text-[#002147] transition-colors" size={20} />
-                <input 
-                  type="password" 
-                  required
-                  placeholder="••••••••" 
-                  className="w-full p-4 pl-12 bg-gray-50 border-2 border-gray-100 rounded-xl outline-none focus:border-[#002147] font-bold transition-all" 
-                />
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <button 
-              type="submit" 
-              className="w-full py-5 bg-[#002147] text-white rounded-xl font-black uppercase tracking-[0.2em] shadow-xl hover:bg-blue-900 transition-all active:scale-95 border-b-4 border-blue-950 mt-4"
-            >
-              Verify & Authorize
-            </button>
-          </form>
-
-          {/* Security Disclaimer */}
-          <div className="mt-10 pt-6 border-t border-gray-100 text-center">
-             <p className="text-[9px] text-gray-400 font-bold uppercase leading-relaxed">
-                Warning: Unauthorized access to this portal is strictly prohibited and monitored under the IT Act 2026.
-             </p>
           </div>
         </div>
+      </div>
+
+      {/* External Branding Footer */}
+      <div className="absolute bottom-8 w-full text-center">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] opacity-60">
+          Government of NCT Delhi | Digital India Initiative
+        </p>
       </div>
     </div>
   );

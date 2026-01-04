@@ -1,36 +1,38 @@
--- Purani tables hatakar fresh start
-DROP TABLE IF EXISTS salary_ledger;
-DROP TABLE IF EXISTS ping_logs;
-DROP TABLE IF EXISTS attendance_logs;
-DROP TABLE IF EXISTS employees;
-DROP TABLE IF EXISTS wards;
+-- 1. CLEANUP: Purani tables hatakar fresh start
+DROP TABLE IF EXISTS salary_ledger CASCADE;
+DROP TABLE IF EXISTS ping_logs CASCADE;
+DROP TABLE IF EXISTS attendance_logs CASCADE;
+DROP TABLE IF EXISTS employees CASCADE;
+DROP TABLE IF EXISTS wards CASCADE;
 
--- 1. Wards Table (Boundary points)
+-- 2. WARDS TABLE: Digital Geofencing Boundaries
 CREATE TABLE wards (
     id SERIAL PRIMARY KEY,
     ward_name VARCHAR(100) NOT NULL,
-    lat DECIMAL(10, 8),
-    lng DECIMAL(11, 8),
+    lat DECIMAL(10, 8) NOT NULL,
+    lng DECIMAL(11, 8) NOT NULL,
     radius_meters INT DEFAULT 1000
 );
 
--- 2. Employees Table (The Core)
+-- 3. EMPLOYEES TABLE: Global Personnel Registry
 CREATE TABLE employees (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    ward_id INT REFERENCES wards(id),
+    role VARCHAR(50) DEFAULT 'worker', -- roles: 'admin', 'zonal', 'supervisor', 'worker'
+    ward_id INT REFERENCES wards(id) ON DELETE SET NULL,
     integrity_score DECIMAL(5,2) DEFAULT 100.00,
     phone_number VARCHAR(15) UNIQUE NOT NULL,
     attendance_count INT DEFAULT 0,
     is_ping_active BOOLEAN DEFAULT FALSE,
     base_salary DECIMAL(10, 2) DEFAULT 25000.00,
-    current_otp VARCHAR(6) DEFAULT NULL
+    current_otp VARCHAR(6) DEFAULT NULL,
+    last_login TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Attendance Logs (Verification Ledger)
+-- 4. ATTENDANCE LOGS: Immutable Security Ledger
 CREATE TABLE attendance_logs (
     id SERIAL PRIMARY KEY,
-    emp_id INT REFERENCES employees(id),
+    emp_id INT REFERENCES employees(id) ON DELETE CASCADE,
     check_in_time TIMESTAMPTZ DEFAULT NOW(),
     lat DECIMAL(10, 8),
     lng DECIMAL(11, 8),
@@ -39,30 +41,60 @@ CREATE TABLE attendance_logs (
     fail_reason TEXT
 );
 
--- 4. Random Ping Logs
+-- 5. PING LOGS: Random Presence Verification
 CREATE TABLE ping_logs (
     id SERIAL PRIMARY KEY,
-    emp_id INT REFERENCES employees(id),
+    emp_id INT REFERENCES employees(id) ON DELETE CASCADE,
     sent_at TIMESTAMPTZ DEFAULT NOW(),
     responded_at TIMESTAMPTZ,
-    status VARCHAR(20) DEFAULT 'PENDING'
+    status VARCHAR(20) DEFAULT 'PENDING' -- 'PENDING', 'SUCCESS', 'FAILED'
 );
 
--- 5. Salary Ledger (Finance)
+-- 6. SALARY LEDGER: Financial Integrity Hub
 CREATE TABLE salary_ledger (
     id SERIAL PRIMARY KEY,
-    emp_id INT REFERENCES employees(id),
+    emp_id INT REFERENCES employees(id) ON DELETE CASCADE,
     amount DECIMAL(10, 2),
-    month_year VARCHAR(20),
-    status VARCHAR(20) DEFAULT 'PENDING',
+    month_year VARCHAR(20), -- e.g., 'Jan-2026'
+    status VARCHAR(20) DEFAULT 'PENDING', -- 'PENDING', 'VERIFIED'
     verified_at TIMESTAMPTZ
 );
 
--- Dummy Data for MCD
-INSERT INTO wards (ward_name, lat, lng, radius_meters) VALUES 
-('Ward 54 - Rohini', 28.7041, 77.1025, 1000),
-('Ward 12 - Lajpat Nagar', 28.5677, 77.2433, 800);
+-- 🚀 SEED DATA: Inserting High-Value Test Data for Hackathon Demo
 
-INSERT INTO employees (name, ward_id, phone_number, base_salary) VALUES 
-('Rajesh Kumar', 1, '9876543210', 28500.00),
-('Sunita Devi', 2, '9988776655', 32000.00);
+-- Insert Wards (Coordinates centered around Delhi/Rohini)
+INSERT INTO wards (ward_name, lat, lng, radius_meters) VALUES 
+('Ward 54 - Rohini Sector 7', 28.7041, 77.1025, 1200),
+('Ward 12 - Lajpat Nagar', 28.5677, 77.2433, 800),
+('Ward 05 - Civil Lines', 28.6814, 77.2227, 1000);
+
+-- Insert Employees (Ensuring ID 1 is the Worker for your Dashboard)
+-- Admin (Commissioner)
+INSERT INTO employees (name, role, ward_id, phone_number, base_salary, integrity_score) VALUES 
+('Vikas Kumar (IAS)', 'admin', 3, '9000000001', 180000.00, 100.00);
+
+-- Worker (Rajesh Kumar - Targeted by Frontend)
+INSERT INTO employees (id, name, role, ward_id, phone_number, base_salary, integrity_score) VALUES 
+(1, 'Rajesh Kumar', 'worker', 1, '9876543210', 28500.00, 98.50)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role;
+
+-- Supervisor
+INSERT INTO employees (name, role, ward_id, phone_number, base_salary, integrity_score) VALUES 
+('Amit Sharma', 'supervisor', 1, '9988776655', 45000.00, 92.40);
+
+-- Extra Workers for Dashboard Analytics
+INSERT INTO employees (name, role, ward_id, phone_number, base_salary, integrity_score) VALUES 
+('Sunita Devi', 'worker', 2, '8888877777', 32000.00, 85.00), -- Critical Alert (Below 90)
+('Ramesh Singh', 'worker', 1, '7777766666', 29000.00, 99.10);
+
+-- Seed a Pending Salary for Rajesh (ID 1) to test OTP verification
+INSERT INTO salary_ledger (emp_id, amount, month_year, status) VALUES 
+(1, 28500.00, 'Jan-2026', 'PENDING');
+
+-- Seed some historical logs for Analytics Charts
+INSERT INTO attendance_logs (emp_id, status, face_match_score) VALUES 
+(1, 'SUCCESS', 0.98),
+(4, 'SUCCESS', 0.95);
+
+-- Set an active OTP for Rajesh (Testing purposes)
+UPDATE employees SET current_otp = '123456' WHERE id = 1;
