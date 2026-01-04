@@ -148,5 +148,5 @@ app.get('/check-db', async (req, res) => {
     } catch (err) { res.status(500).send("DB Error"); }
 });
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`MCD Engine v5.6 active on port ${PORT}`));
