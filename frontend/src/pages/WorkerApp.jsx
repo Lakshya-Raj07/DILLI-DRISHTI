@@ -13,8 +13,9 @@ const WorkerApp = () => {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
+  const [isViolation, setIsViolation] = useState(false); // Boundary alerts
   
-  // New States for Timer Logic
+  // 1. New State for Countdown Logic
   const [timeLeft, setTimeLeft] = useState(null);
   
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -22,11 +23,12 @@ const WorkerApp = () => {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const otpRefs = useRef([]);
 
-  // 1. Fetch Worker Profile Dynamically
+  // Fetch Worker Profile Dynamically
   const fetchWorkerProfile = async () => {
     try {
       const res = await axios.get(`http://localhost:5000/api/worker/${employeeId}`);
       setWorkerData(res.data);
+      if (!res.data.is_ping_active) setIsViolation(false);
     } catch (err) {
       console.error("Profile Fetch Error:", err);
     } finally {
@@ -34,52 +36,54 @@ const WorkerApp = () => {
     }
   };
 
-  // 2. Auto-Polling (Live Alert Every 10 Seconds)
+  // 2. INSTRUCTION: Real-time Polling (Every 5 Seconds)
   useEffect(() => {
-    fetchWorkerProfile(); // Initial load
-    const pollInterval = setInterval(fetchWorkerProfile, 10000);
+    fetchWorkerProfile(); // Initial Load
+    const pollInterval = setInterval(fetchWorkerProfile, 5000);
     return () => clearInterval(pollInterval);
   }, [employeeId]);
 
-  // 3. 10-Minute Countdown Logic
+  // 3. INSTRUCTION: 10-Min Countdown Logic
   useEffect(() => {
     let timer;
     if (workerData?.is_ping_active && workerData?.ping_start_time) {
-      const calculateTimeLeft = () => {
-        const startTime = new Date(workerData.ping_start_time).getTime();
-        const now = new Date().getTime();
-        const elapsedSeconds = Math.floor((now - startTime) / 1000);
-        const remaining = 600 - elapsedSeconds; // 10 minutes total
+      const updateTimer = () => {
+        const start = new Date(workerData.ping_start_time).getTime();
+        const now = Date.now();
+        const elapsed = Math.floor((now - start) / 1000);
+        const remaining = 600 - elapsed; // 600s = 10 mins
 
         if (remaining <= 0) {
           setTimeLeft(0);
           clearInterval(timer);
+          // AUTO-TRIGGER: Submit automatically on timeout
+          handlePingResponse(); 
         } else {
           setTimeLeft(remaining);
         }
       };
 
-      calculateTimeLeft(); // Initial calculation
-      timer = setInterval(calculateTimeLeft, 1000);
+      updateTimer(); // Run once immediately
+      timer = setInterval(updateTimer, 1000);
     } else {
       setTimeLeft(null);
     }
     return () => clearInterval(timer);
   }, [workerData]);
 
-  // Format seconds to MM:SS
-  const formatTime = (seconds) => {
-    if (seconds === null || seconds <= 0) return "00:00";
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  // Utility: Format seconds to MM:SS
+  const formatTime = (s) => {
+    if (s === null || s < 0) return "00:00";
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Helper for dynamic timer color
-  const getTimerColor = (seconds) => {
-    if (seconds > 300) return 'text-green-500'; // Above 5 min
-    if (seconds > 120) return 'text-yellow-500'; // 2-5 min
-    return 'text-red-600 animate-pulse'; // Below 2 min
+  // Utility: Dynamic Color Logic
+  const getTimerColor = (s) => {
+    if (s > 300) return 'text-green-500'; // Safe
+    if (s > 120) return 'text-yellow-500'; // Warning
+    return 'text-red-500 animate-pulse'; // Critical
   };
 
   // Attendance Logic
@@ -105,15 +109,10 @@ const WorkerApp = () => {
     });
   };
 
-  // Random Ping Response Logic
+  // Ping Response with Logic enforcement
   const handlePingResponse = () => {
-    if (!workerData?.is_ping_active) {
-      return alert('No active ping signal detected. Relax, you are on duty!');
-    }
-    if (timeLeft <= 0) {
-      return alert('TIMEOUT! You missed the response window. Penalty reported to Supervisor.');
-    }
-
+    if (!workerData?.is_ping_active) return;
+    
     setLoading(true);
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try {
@@ -123,14 +122,21 @@ const WorkerApp = () => {
           lng: pos.coords.longitude
         });
         setStatus({ type: 'success', message: res.data.message });
+        setIsViolation(false);
         fetchWorkerProfile();
       } catch (err) {
-        setStatus({ type: 'error', message: err.response?.data?.error || "Ping Verification failed!" });
+        if (err.response?.status === 403) {
+            setIsViolation(true);
+            if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+        }
+        setStatus({ type: 'error', message: err.response?.data?.error || "Verification failed!" });
       } finally {
         setLoading(false);
       }
     }, () => {
-      setStatus({ type: 'error', message: "GPS Access Denied" });
+      // Fallback for timeout auto-submit if GPS is denied
+      axios.post('http://localhost:5000/api/ping/respond', { employee_id: employeeId, lat: 0, lng: 0 })
+           .then(() => fetchWorkerProfile());
       setLoading(false);
     });
   };
@@ -170,7 +176,7 @@ const WorkerApp = () => {
       <div className="min-h-screen flex items-center justify-center bg-[#1A2B4C]">
         <div className="text-white text-center">
           <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="font-black uppercase tracking-widest text-xs">Syncing with MCD Mainframe...</p>
+          <p className="font-black uppercase tracking-widest text-xs">Connecting to Dilli Drishti Mainframe...</p>
         </div>
       </div>
     );
@@ -200,7 +206,7 @@ const WorkerApp = () => {
 
         <div className="text-center mb-8">
           <h3 className="text-2xl font-black uppercase tracking-tight">{workerData?.name}</h3>
-          <p className="text-orange-400 font-bold text-[10px] tracking-[0.2em] uppercase mt-1">Field Operations</p>
+          <p className="text-orange-400 font-bold text-[10px] tracking-[0.2em] uppercase mt-1">Operational Personnel</p>
         </div>
 
         <div className="space-y-4 flex-1">
@@ -208,11 +214,15 @@ const WorkerApp = () => {
           <DetailRow icon={<Map size={16}/>} label="Assigned Ward" value={workerData?.ward_name} />
           <DetailRow icon={<Activity size={16}/>} label="Integrity Index" value={`${workerData?.integrity_score}%`} isHigh={workerData?.integrity_score > 90} />
           
-          <div className="p-5 bg-gradient-to-br from-white/10 to-transparent border border-white/10 rounded-[28px] mt-6">
-            <p className="text-[9px] font-black text-blue-300 uppercase mb-1 tracking-widest">Pay Ledger</p>
+          <div className="p-5 bg-gradient-to-br from-white/10 to-transparent border border-white/10 rounded-[28px] mt-6 shadow-inner">
+            <p className="text-[9px] font-black text-blue-300 uppercase mb-1 tracking-widest">Pay-Scale Ledger</p>
             <p className="text-2xl font-black text-white">₹ {workerData?.base_salary?.toLocaleString()}</p>
           </div>
         </div>
+
+        <button className="mt-10 flex items-center justify-center gap-3 p-4 bg-white/5 hover:bg-red-500/20 text-white/60 hover:text-red-400 rounded-2xl transition-all border border-white/10 font-bold text-sm">
+          <LogOut size={18} /> Terminate Session
+        </button>
       </aside>
 
       {/* 2. MAIN ACTION AREA */}
@@ -230,7 +240,7 @@ const WorkerApp = () => {
 
         <div className="bg-white rounded-[40px] p-8 lg:p-12 shadow-xl border border-white text-center relative overflow-hidden mb-10">
           <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/5 rounded-full -mr-16 -mt-16"></div>
-          <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Geo-Verification</h2>
+          <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Biometric Geo-Verification</h2>
           <div className="bg-blue-50 p-6 rounded-[32px] border-2 border-dashed border-blue-100 max-w-md mx-auto mb-10">
                <p className="text-xl font-black text-[#1A2B4C] uppercase">{workerData?.ward_name}</p>
                <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">Live GPS Lock Active</p>
@@ -239,24 +249,26 @@ const WorkerApp = () => {
           <button 
             onClick={handleAttendance}
             disabled={loading}
-            className="w-full max-w-lg py-6 bg-[#1A2B4C] hover:bg-slate-800 text-white rounded-[32px] font-black uppercase tracking-[0.2em] shadow-2xl flex items-center justify-center gap-4 mx-auto"
+            className="w-full max-w-lg py-6 bg-[#1A2B4C] hover:bg-slate-800 text-white rounded-[32px] font-black uppercase tracking-[0.2em] shadow-2xl flex items-center justify-center gap-4 mx-auto transition-all active:scale-95"
           >
-            {loading ? <div className="w-6 h-6 border-4 border-white/20 border-t-white rounded-full animate-spin"></div> : <><MapPin className="text-orange-500" /> Punch Attendance</>}
+            {loading ? <div className="w-6 h-6 border-4 border-white/20 border-t-white rounded-full animate-spin"></div> : <><MapPin className="text-orange-500" /> Punch Presence</>}
           </button>
         </div>
 
+        {/* Dynamic Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <ActionCard 
             icon={<ShieldAlert className={workerData?.is_ping_active ? "text-red-500 animate-pulse" : "text-orange-500"} />} 
             title="Random Ping" 
-            sub={workerData?.is_ping_active ? "Action Window Open" : "Auth Prompt Check"} 
-            label={timeLeft === 0 ? "TIMEOUT" : (loading ? "Verifying..." : "Respond Now")} 
+            sub={workerData?.is_ping_active ? "Urgent Response Required" : "Auth Prompt Check"} 
+            label={timeLeft === 0 ? "TIMEOUT" : (loading ? "Transmitting..." : "Respond Now")} 
             onClick={handlePingResponse}
             color={workerData?.is_ping_active ? "red" : "orange"}
             isPingActive={workerData?.is_ping_active}
             timeLeft={timeLeft}
             formatTime={formatTime}
             getTimerColor={getTimerColor}
+            isViolation={isViolation}
           />
           <ActionCard 
             icon={<IndianRupee className="text-green-600" />} 
@@ -278,7 +290,7 @@ const WorkerApp = () => {
                 <div className="bg-white/20 p-3 rounded-2xl"><IndianRupee size={28} /></div>
                 <button onClick={() => setShowOtpModal(false)}><X size={24} /></button>
               </div>
-              <h3 className="text-2xl font-black uppercase tracking-tight">Vault Release</h3>
+              <h3 className="text-2xl font-black uppercase tracking-tight">Identity Confirmation</h3>
             </div>
             <div className="p-10 text-center">
               <div className="flex justify-between gap-3 mb-10">
@@ -291,16 +303,16 @@ const WorkerApp = () => {
                     value={data}
                     onChange={(e) => handleOtpChange(e.target.value, index)}
                     onKeyDown={(e) => handleKeyDown(e, index)}
-                    className="w-12 h-16 border-2 border-slate-100 bg-slate-50 rounded-2xl text-center text-2xl font-black text-[#1A2B4C] outline-none"
+                    className="w-12 h-16 border-2 border-slate-100 bg-slate-50 rounded-2xl text-center text-2xl font-black text-[#1A2B4C] outline-none transition-all focus:border-orange-500"
                   />
                 ))}
               </div>
               <button 
                 onClick={verifySalaryOtp}
                 disabled={verifyingOtp || otp.includes('')}
-                className="w-full py-5 bg-[#1A2B4C] text-white rounded-[24px] font-black uppercase tracking-[0.2em]"
+                className="w-full py-5 bg-[#1A2B4C] text-white rounded-[24px] font-black uppercase tracking-[0.2em] shadow-xl active:scale-95"
               >
-                {verifyingOtp ? "Authenticating..." : "Unlock Bank Transfer"}
+                {verifyingOtp ? "Verifying..." : "Unlock Bank Transfer"}
               </button>
             </div>
           </div>
@@ -320,29 +332,38 @@ const DetailRow = ({ icon, label, value, isHigh }) => (
   </div>
 );
 
-const ActionCard = ({ icon, title, sub, label, onClick, color, isPingActive, timeLeft, formatTime, getTimerColor }) => (
+const ActionCard = ({ icon, title, sub, label, onClick, color, isPingActive, timeLeft, formatTime, getTimerColor, isViolation }) => (
   <div 
     onClick={onClick}
     className={`bg-white p-8 rounded-[40px] shadow-xl border border-white flex flex-col items-center text-center group cursor-pointer transition-all duration-300 
-      ${isPingActive && timeLeft > 0 ? 'ring-4 ring-red-500/50 animate-bounce-subtle shadow-red-100' : ''}`}
+      ${isPingActive && timeLeft > 0 ? 'ring-4 ring-red-500/50 animate-urgent shadow-red-100' : ''}
+      ${isViolation ? 'border-red-600 bg-red-50' : ''}`}
   >
-    <div className={`w-20 h-20 mb-6 rounded-[28px] flex items-center justify-center bg-${color}-50 shadow-inner`}>{icon}</div>
+    <div className={`w-20 h-20 mb-6 rounded-[28px] flex items-center justify-center shadow-inner transition-all
+      ${isViolation ? 'bg-red-600 text-white scale-110' : `bg-${color}-50`}`}>
+      {icon}
+    </div>
     
     {isPingActive && timeLeft !== null && (
-      <div className={`mb-4 font-black text-3xl tracking-tighter ${getTimerColor(timeLeft)}`}>
+      <div className={`mb-4 font-black text-4xl tracking-tighter ${getTimerColor(timeLeft)}`}>
         {formatTime(timeLeft)}
       </div>
     )}
 
     <h3 className="text-xl font-black text-[#1A2B4C] uppercase mb-1">{title}</h3>
-    <p className={`text-xs font-bold uppercase tracking-widest mb-6 ${isPingActive && timeLeft > 0 ? 'text-red-600' : 'text-slate-400'}`}>{sub}</p>
+    <p className={`text-xs font-bold uppercase tracking-widest mb-6 
+      ${isViolation ? 'text-red-700 underline' : (isPingActive && timeLeft > 0 ? 'text-red-600' : 'text-slate-400')}`}>
+      {isViolation ? "OUTSIDE WARD" : (isPingActive ? `REMAINING: ${formatTime(timeLeft)}` : sub)}
+    </p>
     
     <span className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all 
-      ${timeLeft === 0 ? 'bg-slate-200 border-slate-300 text-slate-500 cursor-not-allowed' : 
+      ${isViolation ? 'bg-red-600 border-red-700 text-white' : (
+        timeLeft === 0 ? 'bg-slate-200 border-slate-300 text-slate-500 cursor-not-allowed' : 
         color === 'red' ? 'border-red-100 text-red-500 bg-red-50 group-hover:bg-red-500 group-hover:text-white' : 
         color === 'orange' ? 'border-orange-100 text-orange-500 bg-orange-50 group-hover:bg-orange-500 group-hover:text-white' : 
-        'border-green-100 text-green-600 bg-green-50 group-hover:bg-green-600 group-hover:text-white'}`}>
-      {label}
+        'border-green-100 text-green-600 bg-green-50 group-hover:bg-green-600 group-hover:text-white'
+      )}`}>
+      {isViolation ? "ACCESS BLOCKED" : label}
     </span>
   </div>
 );

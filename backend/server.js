@@ -328,18 +328,16 @@ app.get('/api/supervisor/stats', async (req, res) => {
 
 // --- 4. COMMON & FIELD OPERATIONS (RETAINED ALL FEATURES) ---
 
-// Get Profile for WorkerApp (UPDATED with Ping Metadata)
+// UPDATED: Profile for WorkerApp (Now Time-Aware with Ping Metadata)
 app.get('/api/worker/:id', async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT e.*, w.ward_name, p.sent_at as ping_start_time 
+            SELECT e.*, w.ward_name, w.lat as ward_lat, w.lng as ward_lng, w.radius_meters, p.sent_at as ping_start_time 
             FROM employees e 
             JOIN wards w ON e.ward_id = w.id 
             LEFT JOIN ping_logs p ON e.id = p.emp_id AND p.status = 'PENDING' 
             WHERE e.id = $1 
-            ORDER BY p.sent_at DESC LIMIT 1`, 
-            [req.params.id]
-        );
+            ORDER BY p.sent_at DESC LIMIT 1`, [req.params.id]);
         res.status(result.rowCount ? 200 : 404).json(result.rows[0] || { message: "Not Found" });
     } catch (err) { res.status(500).json({ error: "Mainframe Error" }); }
 });
@@ -375,32 +373,64 @@ app.post('/api/ping/trigger', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Transmission Failed" }); }
 });
 
-// Ping Response Logic (Worker Response - NEWLY ADDED)
+// UPDATED: Ping Response Logic (Geofence + SLA + Penalty Logic)
 app.post('/api/ping/respond', async (req, res) => {
     const { employee_id, lat, lng } = req.body;
     try {
-        const empResult = await db.query('SELECT is_ping_active FROM employees WHERE id = $1', [employee_id]);
-        
-        if (empResult.rowCount === 0 || !empResult.rows[0].is_ping_active) {
+        // Atomic fetch of worker status, ward boundaries, and latest pending ping
+        const query = `
+            SELECT e.is_ping_active, e.integrity_score, w.lat as w_lat, w.lng as w_lng, w.radius_meters,
+                   p.id as ping_id, p.sent_at
+            FROM employees e
+            JOIN wards w ON e.ward_id = w.id
+            LEFT JOIN ping_logs p ON e.id = p.emp_id AND p.status = 'PENDING'
+            WHERE e.id = $1
+            ORDER BY p.sent_at DESC LIMIT 1
+        `;
+        const result = await db.query(query, [employee_id]);
+
+        if (result.rowCount === 0 || !result.rows[0].is_ping_active || !result.rows[0].ping_id) {
             return res.status(400).json({ error: "No active ping request found." });
         }
 
-        await db.query(`
-            UPDATE ping_logs 
-            SET status = 'SUCCESS', responded_at = NOW() 
-            WHERE id = (
-                SELECT id FROM ping_logs 
-                WHERE emp_id = $1 AND status = 'PENDING' 
-                ORDER BY sent_at DESC LIMIT 1
-            )`, [employee_id]);
+        const data = result.rows[0];
+        const distance = calculateDistance(lat, lng, parseFloat(data.w_lat), parseFloat(data.w_lng));
+        const timeElapsedSeconds = (Date.now() - new Date(data.sent_at).getTime()) / 1000;
 
+        let finalStatus = 'SUCCESS';
+        let scoreChange = 0.5;
+        let message = "Presence confirmed. Score increased.";
+        let isViolation = false;
+
+        // 1. Check for Timeout (10 Minutes window)
+        if (timeElapsedSeconds > 600) {
+            finalStatus = 'FAILED';
+            scoreChange = -2.0;
+            message = 'Timeout Penalty Applied';
+            isViolation = true;
+        } 
+        // 2. Check for Geofence Violation
+        else if (distance > data.radius_meters) {
+            finalStatus = 'FAILED';
+            scoreChange = -2.0;
+            message = 'Geofence Violation!';
+            isViolation = true;
+        }
+
+        // Finalize results in DB
+        await db.query(`UPDATE ping_logs SET status = $1, responded_at = NOW() WHERE id = $2`, [finalStatus, data.ping_id]);
+        
         await db.query(`
             UPDATE employees 
-            SET integrity_score = LEAST(integrity_score + 0.5, 100.00), 
+            SET integrity_score = GREATEST(0, LEAST(100, integrity_score + $1)), 
                 is_ping_active = FALSE 
-            WHERE id = $1`, [employee_id]);
+            WHERE id = $2`, [scoreChange, employee_id]);
 
-        res.json({ status: "SUCCESS", message: "Presence confirmed. Score increased." });
+        if (isViolation) {
+            return res.status(403).json({ status: "FAILED", error: message });
+        }
+
+        res.json({ status: "SUCCESS", message: message });
 
     } catch (err) {
         console.error("Ping Response Engine Error:", err);

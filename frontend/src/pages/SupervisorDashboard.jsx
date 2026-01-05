@@ -15,29 +15,44 @@ const SupervisorDashboard = () => {
   const [page, setPage] = useState(0);
   const [statusMsg, setStatusMsg] = useState(null);
 
-  const fetchData = async () => {
-    setLoading(true);
+  // UPDATED: fetchData now takes a showLoader flag to prevent dashboard "blinking"
+  const fetchData = async (showLoader = false) => {
+    if (showLoader) setLoading(true);
     try {
       const workerRes = await axios.get(`http://localhost:5000/api/supervisor/workers?search=${search}&offset=${page * 15}`);
       setWorkers(workerRes.data);
       const statsRes = await axios.get('http://localhost:5000/api/supervisor/stats');
       setStats(statsRes.data);
-    } catch (err) { console.error("Sync Error"); }
-    setLoading(false);
+    } catch (err) { 
+      console.error("Sync Error: Mainframe unreachable"); 
+    } finally {
+      if (showLoader) setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchData(); }, [search, page]);
+  // 1. Triggered on search or page change (With Loader)
+  useEffect(() => { 
+    fetchData(true); 
+  }, [search, page]);
+
+  // 2. INSTRUCTION: Live Polling (Every 5 seconds, Without Loader)
+  useEffect(() => {
+    const pollTimer = setInterval(() => {
+      fetchData(false); // Background update
+    }, 5000);
+
+    return () => clearInterval(pollTimer); // Cleanup to prevent memory leaks
+  }, [search, page]);
 
   const triggerAction = async (type, id) => {
     const url = type === 'ping' ? `/api/ping/trigger` : `/api/salary/release`;
     try {
-      // Logic fix: Template literals for reliable URLs
       const res = await axios.post(`http://localhost:5000${url}`, { employee_id: id });
       setStatusMsg({ 
         type: 'success', 
         text: type === 'ping' ? "Signal Transmitted!" : `Payout Authorized. Demo OTP: ${res.data.otp_hint}` 
       });
-      fetchData();
+      fetchData(false); // Refresh data immediately after action
     } catch (err) { 
       setStatusMsg({ type: 'error', text: "Operational Error: Registry Locked" }); 
     }
@@ -106,8 +121,15 @@ const SupervisorDashboard = () => {
               </div>
             )}
 
-            {/* PERFORMANCE TABLE (SCALABLE) */}
-            <div className="bg-white rounded-[40px] shadow-2xl shadow-slate-200 border border-white overflow-hidden flex-1">
+            {/* PERFORMANCE TABLE */}
+            <div className="bg-white rounded-[40px] shadow-2xl shadow-slate-200 border border-white overflow-hidden flex-1 relative">
+               {/* Show spinner only during manual loads */}
+               {loading && (
+                 <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-50 flex items-center justify-center">
+                   <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                 </div>
+               )}
+
                <div className="overflow-x-auto h-full overflow-y-auto">
                   <table className="w-full text-left">
                      <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
@@ -124,19 +146,23 @@ const SupervisorDashboard = () => {
                              <td className="px-8 py-5">
                                 <div className="flex items-center gap-4">
                                    <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-slate-100 shadow-inner group-hover:scale-110 transition-transform"><img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${worker.name}`} alt="av" /></div>
-                                   <div><p className="text-xs font-black text-[#1A2B4C] uppercase">{worker.name}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">ID: MCD-2024-{worker.id}</p></div>
+                                   <div><p className="text-xs font-black text-[#1A2B4C] uppercase">{worker.name}</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">ID: MCD-2026-{worker.id}</p></div>
                                 </div>
                              </td>
                              <td className="px-8 py-5"><p className="text-[11px] font-bold text-slate-600 uppercase flex items-center gap-2"><MapPin size={12} className="text-slate-300" /> {worker.ward_name}</p></td>
                              <td className="px-8 py-5 text-center">
                                 <div className="flex flex-col items-center gap-1">
-                                   <span className={`text-sm font-black ${parseFloat(worker.integrity_score) < 90 ? 'text-red-600' : 'text-blue-600'}`}>{worker.integrity_score}%</span>
-                                   {worker.is_ping_active && <span className="flex items-center gap-1 text-[8px] font-black text-orange-500 uppercase bg-orange-50 px-2 py-0.5 rounded-full animate-pulse"><Radio size={8} /> Awaiting Resp</span>}
+                                   <span className={`text-sm font-black ${parseFloat(worker.integrity_score) < 85 ? 'text-red-600' : 'text-blue-600'}`}>{worker.integrity_score}%</span>
+                                   {worker.is_ping_active ? (
+                                     <span className="flex items-center gap-1 text-[8px] font-black text-orange-500 uppercase bg-orange-50 px-2 py-0.5 rounded-full animate-pulse"><Radio size={8} /> Awaiting Resp</span>
+                                   ) : (
+                                     <span className="text-[8px] font-black text-green-600 uppercase bg-green-50 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 size={8}/> Synchronized</span>
+                                   )}
                                 </div>
                              </td>
                              <td className="px-8 py-5 text-right flex justify-end gap-2">
                                 <button onClick={() => triggerAction('ping', worker.id)} className="px-5 py-2.5 bg-[#1A2B4C] text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-orange-500 transition-all shadow-md active:scale-95">Signal Ping</button>
-                                <button onClick={() => triggerAction('payout', worker.id)} className="px-5 py-2.5 bg-white border-2 border-slate-100 text-[#1A2B4C] rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-green-500 hover:text-green-600 transition-all shadow-sm active:scale-95">Authorize Pay</button>
+                                <button onClick={() => triggerAction('payout', worker.id)} className="px-5 py-2.5 bg-white border-2 border-slate-100 text-[#1A2B4C] rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-green-500 hover:text-white transition-all shadow-sm active:scale-95">Authorize Pay</button>
                              </td>
                           </tr>
                         ))}
@@ -147,7 +173,7 @@ const SupervisorDashboard = () => {
 
             {/* PAGINATION */}
             <div className="mt-8 flex justify-between items-center bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
-               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 italic flex items-center gap-2"><Database size={12}/> Showing batch of 15 • 150K Registry Enabled</div>
+               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 italic flex items-center gap-2"><Database size={12}/> Live Registry Polling Active (5s)</div>
                <div className="flex items-center gap-4">
                   <button onClick={() => setPage(Math.max(0, page - 1))} className="p-3 bg-slate-50 rounded-2xl hover:bg-blue-600 hover:text-white transition-all border border-slate-100 disabled:opacity-30" disabled={page === 0}><ChevronLeft size={20}/></button>
                   <span className="text-xs font-black text-[#1A2B4C] uppercase bg-slate-100 px-4 py-2 rounded-xl">Batch {page + 1}</span>
