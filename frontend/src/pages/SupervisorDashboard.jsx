@@ -15,9 +15,10 @@ const SupervisorDashboard = () => {
   const [page, setPage] = useState(0);
   const [statusMsg, setStatusMsg] = useState(null);
 
-  // UPDATED: fetchData now takes a showLoader flag to prevent dashboard "blinking"
-  const fetchData = async (showLoader = false) => {
-    if (showLoader) setLoading(true);
+  // OPTIMIZATION: fetchData now supports "Silent" updates to prevent dashboard flickering
+  const fetchData = async (isSilent = false) => {
+    // Only show the loading spinner if it's NOT a silent background poll
+    if (!isSilent) setLoading(true); 
     try {
       const workerRes = await axios.get(`http://localhost:5000/api/supervisor/workers?search=${search}&offset=${page * 15}`);
       setWorkers(workerRes.data);
@@ -26,22 +27,22 @@ const SupervisorDashboard = () => {
     } catch (err) { 
       console.error("Sync Error: Mainframe unreachable"); 
     } finally {
-      if (showLoader) setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
-  // 1. Triggered on search or page change (With Loader)
+  // 1. Manual Trigger: Runs on Search or Pagination (With UI Feedback)
   useEffect(() => { 
-    fetchData(true); 
+    fetchData(false); 
   }, [search, page]);
 
-  // 2. INSTRUCTION: Live Polling (Every 5 seconds, Without Loader)
+  // 2. SILENT POLLING: Syncs data every 5 seconds (Without UI flickering)
   useEffect(() => {
-    const pollTimer = setInterval(() => {
-      fetchData(false); // Background update
+    const liveSync = setInterval(() => {
+      fetchData(true); // isSilent = true
     }, 5000);
 
-    return () => clearInterval(pollTimer); // Cleanup to prevent memory leaks
+    return () => clearInterval(liveSync); // Cleanup on component unmount
   }, [search, page]);
 
   const triggerAction = async (type, id) => {
@@ -52,7 +53,7 @@ const SupervisorDashboard = () => {
         type: 'success', 
         text: type === 'ping' ? "Signal Transmitted!" : `Payout Authorized. Demo OTP: ${res.data.otp_hint}` 
       });
-      fetchData(false); // Refresh data immediately after action
+      fetchData(true); // Immediate silent refresh to show updated "Awaiting Resp" status
     } catch (err) { 
       setStatusMsg({ type: 'error', text: "Operational Error: Registry Locked" }); 
     }
@@ -123,7 +124,7 @@ const SupervisorDashboard = () => {
 
             {/* PERFORMANCE TABLE */}
             <div className="bg-white rounded-[40px] shadow-2xl shadow-slate-200 border border-white overflow-hidden flex-1 relative">
-               {/* Show spinner only during manual loads */}
+               {/* Show spinner only during manual loads to prevent background sync flickering */}
                {loading && (
                  <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-50 flex items-center justify-center">
                    <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -152,6 +153,7 @@ const SupervisorDashboard = () => {
                              <td className="px-8 py-5"><p className="text-[11px] font-bold text-slate-600 uppercase flex items-center gap-2"><MapPin size={12} className="text-slate-300" /> {worker.ward_name}</p></td>
                              <td className="px-8 py-5 text-center">
                                 <div className="flex flex-col items-center gap-1">
+                                   {/* INTEGRITY COLUMN: Bound to live worker.integrity_score */}
                                    <span className={`text-sm font-black ${parseFloat(worker.integrity_score) < 85 ? 'text-red-600' : 'text-blue-600'}`}>{worker.integrity_score}%</span>
                                    {worker.is_ping_active ? (
                                      <span className="flex items-center gap-1 text-[8px] font-black text-orange-500 uppercase bg-orange-50 px-2 py-0.5 rounded-full animate-pulse"><Radio size={8} /> Awaiting Resp</span>

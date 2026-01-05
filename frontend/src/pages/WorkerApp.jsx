@@ -8,14 +8,14 @@ import {
 
 const WorkerApp = () => {
   // Real dynamic data states
-  const [employeeId] = useState(1); // Pehle worker ki ID
+  const [employeeId] = useState(1); 
   const [workerData, setWorkerData] = useState(null);
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
-  const [isViolation, setIsViolation] = useState(false); // Boundary alerts
+  const [isViolation, setIsViolation] = useState(false); 
   
-  // 1. New State for Countdown Logic
+  // 1. MECHANICAL CHANGE: TimeLeft State
   const [timeLeft, setTimeLeft] = useState(null);
   
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -36,34 +36,37 @@ const WorkerApp = () => {
     }
   };
 
-  // 2. INSTRUCTION: Real-time Polling (Every 5 Seconds)
+  // 2. MECHANICAL CHANGE: Polling Setup (Every 5 Seconds)
   useEffect(() => {
     fetchWorkerProfile(); // Initial Load
-    const pollInterval = setInterval(fetchWorkerProfile, 5000);
+    const pollInterval = setInterval(() => {
+      fetchWorkerProfile();
+    }, 5000); // 5-second sync as per instructions
+
     return () => clearInterval(pollInterval);
   }, [employeeId]);
 
-  // 3. INSTRUCTION: 10-Min Countdown Logic
+  // 3. MECHANICAL CHANGE: 10-Minute Countdown Logic
   useEffect(() => {
     let timer;
     if (workerData?.is_ping_active && workerData?.ping_start_time) {
       const updateTimer = () => {
-        const start = new Date(workerData.ping_start_time).getTime();
-        const now = Date.now();
-        const elapsed = Math.floor((now - start) / 1000);
-        const remaining = 600 - elapsed; // 600s = 10 mins
+        const startTime = new Date(workerData.ping_start_time).getTime();
+        const currentTime = Date.now();
+        const secondsElapsed = Math.floor((currentTime - startTime) / 1000);
+        const remaining = 600 - secondsElapsed; // 10 minutes (600s)
 
         if (remaining <= 0) {
           setTimeLeft(0);
           clearInterval(timer);
-          // AUTO-TRIGGER: Submit automatically on timeout
+          // AUTO-TRIGGER: Force response on timeout to trigger backend FAILED status
           handlePingResponse(); 
         } else {
           setTimeLeft(remaining);
         }
       };
 
-      updateTimer(); // Run once immediately
+      updateTimer(); 
       timer = setInterval(updateTimer, 1000);
     } else {
       setTimeLeft(null);
@@ -79,11 +82,10 @@ const WorkerApp = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Utility: Dynamic Color Logic
   const getTimerColor = (s) => {
-    if (s > 300) return 'text-green-500'; // Safe
-    if (s > 120) return 'text-yellow-500'; // Warning
-    return 'text-red-500 animate-pulse'; // Critical
+    if (s > 300) return 'text-green-500'; 
+    if (s > 120) return 'text-yellow-500'; 
+    return 'text-red-500 animate-pulse'; 
   };
 
   // Attendance Logic
@@ -134,7 +136,7 @@ const WorkerApp = () => {
         setLoading(false);
       }
     }, () => {
-      // Fallback for timeout auto-submit if GPS is denied
+      // Fallback for auto-submit if GPS is denied or timeout
       axios.post('http://localhost:5000/api/ping/respond', { employee_id: employeeId, lat: 0, lng: 0 })
            .then(() => fetchWorkerProfile());
       setLoading(false);
@@ -176,7 +178,7 @@ const WorkerApp = () => {
       <div className="min-h-screen flex items-center justify-center bg-[#1A2B4C]">
         <div className="text-white text-center">
           <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="font-black uppercase tracking-widest text-xs">Connecting to Dilli Drishti Mainframe...</p>
+          <p className="font-black uppercase tracking-widest text-xs">Syncing with MCD Mainframe...</p>
         </div>
       </div>
     );
@@ -212,6 +214,7 @@ const WorkerApp = () => {
         <div className="space-y-4 flex-1">
           <DetailRow icon={<User size={16}/>} label="Service ID" value={`#MCD-2026-00${workerData?.id}`} />
           <DetailRow icon={<Map size={16}/>} label="Assigned Ward" value={workerData?.ward_name} />
+          {/* MECHANICAL CHANGE: Displaying Live Integrity Score from DB */}
           <DetailRow icon={<Activity size={16}/>} label="Integrity Index" value={`${workerData?.integrity_score}%`} isHigh={workerData?.integrity_score > 90} />
           
           <div className="p-5 bg-gradient-to-br from-white/10 to-transparent border border-white/10 rounded-[28px] mt-6 shadow-inner">
@@ -257,10 +260,11 @@ const WorkerApp = () => {
 
         {/* Dynamic Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* MECHANICAL CHANGE: UI Binding for Ping Card */}
           <ActionCard 
             icon={<ShieldAlert className={workerData?.is_ping_active ? "text-red-500 animate-pulse" : "text-orange-500"} />} 
             title="Random Ping" 
-            sub={workerData?.is_ping_active ? "Urgent Response Required" : "Auth Prompt Check"} 
+            sub={workerData?.is_ping_active ? `REMAINING: ${formatTime(timeLeft)}` : "Auth Prompt Check"} 
             label={timeLeft === 0 ? "TIMEOUT" : (loading ? "Transmitting..." : "Respond Now")} 
             onClick={handlePingResponse}
             color={workerData?.is_ping_active ? "red" : "orange"}
@@ -336,7 +340,7 @@ const ActionCard = ({ icon, title, sub, label, onClick, color, isPingActive, tim
   <div 
     onClick={onClick}
     className={`bg-white p-8 rounded-[40px] shadow-xl border border-white flex flex-col items-center text-center group cursor-pointer transition-all duration-300 
-      ${isPingActive && timeLeft > 0 ? 'ring-4 ring-red-500/50 animate-urgent shadow-red-100' : ''}
+      ${isPingActive && timeLeft > 0 ? 'ring-4 ring-red-500 border-red-500 animate-pulse shadow-red-100' : ''}
       ${isViolation ? 'border-red-600 bg-red-50' : ''}`}
   >
     <div className={`w-20 h-20 mb-6 rounded-[28px] flex items-center justify-center shadow-inner transition-all
@@ -344,6 +348,7 @@ const ActionCard = ({ icon, title, sub, label, onClick, color, isPingActive, tim
       {icon}
     </div>
     
+    {/* MECHANICAL CHANGE: MM:SS Timer display inside Card */}
     {isPingActive && timeLeft !== null && (
       <div className={`mb-4 font-black text-4xl tracking-tighter ${getTimerColor(timeLeft)}`}>
         {formatTime(timeLeft)}
@@ -353,13 +358,13 @@ const ActionCard = ({ icon, title, sub, label, onClick, color, isPingActive, tim
     <h3 className="text-xl font-black text-[#1A2B4C] uppercase mb-1">{title}</h3>
     <p className={`text-xs font-bold uppercase tracking-widest mb-6 
       ${isViolation ? 'text-red-700 underline' : (isPingActive && timeLeft > 0 ? 'text-red-600' : 'text-slate-400')}`}>
-      {isViolation ? "OUTSIDE WARD" : (isPingActive ? `REMAINING: ${formatTime(timeLeft)}` : sub)}
+      {isViolation ? "OUTSIDE WARD" : sub}
     </p>
     
     <span className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all 
       ${isViolation ? 'bg-red-600 border-red-700 text-white' : (
         timeLeft === 0 ? 'bg-slate-200 border-slate-300 text-slate-500 cursor-not-allowed' : 
-        color === 'red' ? 'border-red-100 text-red-500 bg-red-50 group-hover:bg-red-500 group-hover:text-white' : 
+        color === 'red' ? 'border-red-500 text-red-500 bg-red-50 group-hover:bg-red-500 group-hover:text-white' : 
         color === 'orange' ? 'border-orange-100 text-orange-500 bg-orange-50 group-hover:bg-orange-500 group-hover:text-white' : 
         'border-green-100 text-green-600 bg-green-50 group-hover:bg-green-600 group-hover:text-white'
       )}`}>

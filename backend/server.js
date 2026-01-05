@@ -270,9 +270,7 @@ app.post('/api/login', async (req, res) => {
 
         const user = userResult.rows[0];
 
-        // LOGIC: Device Binding (Checking previous logic)
         if (!user.device_id) {
-            // Case 1: First time login - Bind the device permanently
             await db.query('UPDATE employees SET device_id = $1 WHERE id = $2', [device_id, user.id]);
             return res.json({ 
                 message: "Login Successful. Device bound permanently.", 
@@ -280,14 +278,10 @@ app.post('/api/login', async (req, res) => {
             });
         } 
         
-        // UPDATED: Temporarily bypassing mismatch for testing phase
         if (user.device_id !== device_id) {
-            // Case 2: Device Mismatch - Potential Proxy Attempt
             console.warn('SECURITY ALERT: Device Mismatch for user, but bypassing for testing phase.');
-            // res.status(403).json({ error: "Security Violation: Unrecognized Device" }); 
         }
 
-        // Case 3: Successful Login (Now reachable even if device mismatches)
         res.json({ message: "Login Successful", user });
 
     } catch (err) {
@@ -326,18 +320,19 @@ app.get('/api/supervisor/stats', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Stats Sync Failed" }); }
 });
 
-// --- 4. COMMON & FIELD OPERATIONS (RETAINED ALL FEATURES) ---
+// --- 4. COMMON & FIELD OPERATIONS ---
 
-// UPDATED: Profile for WorkerApp (Now Time-Aware with Ping Metadata)
+// UPDATED: Route /api/worker/:id with rigid subquery logic
 app.get('/api/worker/:id', async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT e.*, w.ward_name, w.lat as ward_lat, w.lng as ward_lng, w.radius_meters, p.sent_at as ping_start_time 
+            SELECT e.*, w.ward_name, w.lat as ward_lat, w.lng as ward_lng, w.radius_meters, 
+            (SELECT sent_at FROM ping_logs WHERE emp_id = e.id AND status = 'PENDING' ORDER BY sent_at DESC LIMIT 1) as ping_start_time 
             FROM employees e 
             JOIN wards w ON e.ward_id = w.id 
-            LEFT JOIN ping_logs p ON e.id = p.emp_id AND p.status = 'PENDING' 
-            WHERE e.id = $1 
-            ORDER BY p.sent_at DESC LIMIT 1`, [req.params.id]);
+            WHERE e.id = $1`, 
+            [req.params.id]
+        );
         res.status(result.rowCount ? 200 : 404).json(result.rows[0] || { message: "Not Found" });
     } catch (err) { res.status(500).json({ error: "Mainframe Error" }); }
 });
@@ -373,64 +368,61 @@ app.post('/api/ping/trigger', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Transmission Failed" }); }
 });
 
-// UPDATED: Ping Response Logic (Geofence + SLA + Penalty Logic)
+// UPDATED: Route /api/ping/respond with Rigid Multi-Step Logic
 app.post('/api/ping/respond', async (req, res) => {
     const { employee_id, lat, lng } = req.body;
     try {
-        // Atomic fetch of worker status, ward boundaries, and latest pending ping
-        const query = `
-            SELECT e.is_ping_active, e.integrity_score, w.lat as w_lat, w.lng as w_lng, w.radius_meters,
-                   p.id as ping_id, p.sent_at
+        // Fetch current context
+        const contextQuery = `
+            SELECT e.integrity_score, w.lat as w_lat, w.lng as w_lng, w.radius_meters, p.sent_at, p.id as ping_id
             FROM employees e
             JOIN wards w ON e.ward_id = w.id
-            LEFT JOIN ping_logs p ON e.id = p.emp_id AND p.status = 'PENDING'
-            WHERE e.id = $1
+            JOIN ping_logs p ON e.id = p.emp_id
+            WHERE e.id = $1 AND p.status = 'PENDING'
             ORDER BY p.sent_at DESC LIMIT 1
         `;
-        const result = await db.query(query, [employee_id]);
+        const context = await db.query(contextQuery, [employee_id]);
 
-        if (result.rowCount === 0 || !result.rows[0].is_ping_active || !result.rows[0].ping_id) {
+        if (context.rowCount === 0) {
             return res.status(400).json({ error: "No active ping request found." });
         }
 
-        const data = result.rows[0];
+        const data = context.rows[0];
+        const timeDiffMinutes = (Date.now() - new Date(data.sent_at).getTime()) / 60000;
         const distance = calculateDistance(lat, lng, parseFloat(data.w_lat), parseFloat(data.w_lng));
-        const timeElapsedSeconds = (Date.now() - new Date(data.sent_at).getTime()) / 1000;
 
         let finalStatus = 'SUCCESS';
-        let scoreChange = 0.5;
-        let message = "Presence confirmed. Score increased.";
-        let isViolation = false;
+        let scoreAdjustment = 0.5;
+        let errorMessage = null;
 
-        // 1. Check for Timeout (10 Minutes window)
-        if (timeElapsedSeconds > 600) {
+        // Step 1: Timer Check
+        if (timeDiffMinutes > 10) {
             finalStatus = 'FAILED';
-            scoreChange = -2.0;
-            message = 'Timeout Penalty Applied';
-            isViolation = true;
+            scoreAdjustment = -2.0;
+            errorMessage = 'Timeout Penalty Applied';
         } 
-        // 2. Check for Geofence Violation
+        // Step 2 & 3: Geofence Check
         else if (distance > data.radius_meters) {
             finalStatus = 'FAILED';
-            scoreChange = -2.0;
-            message = 'Geofence Violation!';
-            isViolation = true;
+            scoreAdjustment = -2.0;
+            errorMessage = 'Geofence Violation';
         }
 
-        // Finalize results in DB
+        // Step 4 & 5: Update database and return updated user object
         await db.query(`UPDATE ping_logs SET status = $1, responded_at = NOW() WHERE id = $2`, [finalStatus, data.ping_id]);
         
-        await db.query(`
+        const updatedUser = await db.query(`
             UPDATE employees 
             SET integrity_score = GREATEST(0, LEAST(100, integrity_score + $1)), 
                 is_ping_active = FALSE 
-            WHERE id = $2`, [scoreChange, employee_id]);
+            WHERE id = $2 
+            RETURNING *`, [scoreAdjustment, employee_id]);
 
-        if (isViolation) {
-            return res.status(403).json({ status: "FAILED", error: message });
+        if (finalStatus === 'FAILED') {
+            return res.status(403).json({ status: 'FAILED', message: errorMessage, user: updatedUser.rows[0] });
         }
 
-        res.json({ status: "SUCCESS", message: message });
+        res.json({ status: 'SUCCESS', message: 'Presence confirmed. Score increased.', user: updatedUser.rows[0] });
 
     } catch (err) {
         console.error("Ping Response Engine Error:", err);
@@ -438,7 +430,7 @@ app.post('/api/ping/respond', async (req, res) => {
     }
 });
 
-// --- 5. FINANCIAL INTEGRITY (FIXED PAYOUT BUG) ---
+// --- 5. FINANCIAL INTEGRITY ---
 
 app.post('/api/salary/release', async (req, res) => {
     const { employee_id } = req.body;
@@ -455,7 +447,6 @@ app.post('/api/salary/release', async (req, res) => {
     }
 });
 
-// Salary Verification (Worker Side)
 app.post('/api/salary/verify', async (req, res) => {
     const { employee_id, otp } = req.body;
     try {
@@ -468,7 +459,6 @@ app.post('/api/salary/verify', async (req, res) => {
     } catch (err) { res.status(500).send("Payment failed"); }
 });
 
-// Commissioner Data Fetch
 app.get('/check-db', async (req, res) => {
     try {
         const result = await db.query(`SELECT e.*, w.ward_name, w.lat as ward_lat, w.lng as ward_lng, w.radius_meters FROM employees e JOIN wards w ON e.ward_id = w.id ORDER BY e.integrity_score DESC`);
