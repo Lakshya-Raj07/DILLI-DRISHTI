@@ -233,7 +233,7 @@
 
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Lock, User, ShieldCheck, Landmark, Fingerprint, Info, CheckCircle2 } from 'lucide-react';
@@ -243,12 +243,10 @@ const Login = ({ setUserRole }) => {
   const [empId, setEmpId] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [userId, setUserId] = useState(null); // Local state for ID tracking
   const navigate = useNavigate();
 
-  // Utility: Generate or Fetch Unique Device Fingerprint (Using sessionStorage for Tab-level Isolation)
+  // Utility: Generate or Fetch Unique Device Fingerprint (sessionStorage for Multi-tab Testing)
   const getDeviceId = () => {
-    // UPDATED: Switched from localStorage to sessionStorage to support multi-tab device simulation
     let deviceId = sessionStorage.getItem('mcd_device_id');
     if (!deviceId) {
       deviceId = 'DEV-' + Math.random().toString(36).slice(2, 11).toUpperCase();
@@ -264,24 +262,23 @@ const Login = ({ setUserRole }) => {
     const generatedId = getDeviceId();
 
     try {
-      // Step 1: Real Backend Authorization Call
+      // Step 1: Backend Call
       const response = await axios.post('http://localhost:5000/api/login', {
         phone_number: empId, 
         device_id: generatedId
       });
 
-      // Step 2: Handle Successful Authorization
+      // Step 2: Handle Success
       if (response.status === 200) {
-        // UPDATED: Ensuring id and role are captured from response
-        const { id, role: userRoleFromDb } = response.data.user;
+        const user = response.data.user; // Extract user object as per instruction
         
-        // Update States
-        setUserRole(userRoleFromDb); // Setting global role state
-        setUserId(id);             // Setting local ID state
+        // Update Global State
+        setUserRole(user.role);
         
-        // Store session for persistence (sessionStorage used here as well)
-        sessionStorage.setItem('user_session', JSON.stringify(response.data.user));
+        // Store session for persistence
+        sessionStorage.setItem('user_session', JSON.stringify(user));
 
+        // INSTRUCTION: Role-based Navigation Check
         const routes = {
           admin: '/admin',
           zonal: '/zonal',
@@ -289,8 +286,7 @@ const Login = ({ setUserRole }) => {
           worker: '/worker'
         };
 
-        // Navigate based on actual DB role
-        navigate(routes[userRoleFromDb] || '/worker');
+        navigate(routes[user.role] || '/worker');
       }
 
     } catch (err) {

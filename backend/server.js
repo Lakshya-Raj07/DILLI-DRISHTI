@@ -223,6 +223,8 @@ const express = require('express');
 const cors = require('cors');
 const db = require('./db');
 const fs = require('fs');
+// FIX: Path updated since all files are in the root folder
+const { executeRotation } = require('./rotationEngine'); 
 require('dotenv').config();
 
 const app = express();
@@ -237,6 +239,7 @@ const initDB = async () => {
         console.log("-----------------------------------------");
         console.log("   DILLI DRISHTI v5.6 COMMAND ENGINE     ");
         console.log("   STATUS: SCALABLE & SECURE ACTIVE      ");
+        console.log("   FILE STRUCTURE: FLAT ROOT DETECTED    ");
         console.log("-----------------------------------------");
     } catch (err) {
         console.error("Critical: Database Init Failed ->", err);
@@ -244,7 +247,7 @@ const initDB = async () => {
 };
 initDB();
 
-// Precision Geofencing Formula (Retained for Attendance logic)
+// Precision Geofencing Formula
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3; 
     const phi1 = lat1 * Math.PI / 180;
@@ -257,7 +260,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-// --- 2. AUTHENTICATION & SECURITY (DEVICE BINDING RETAINED) ---
+// --- 2. AUTHENTICATION & SECURITY ---
 
 app.post('/api/login', async (req, res) => {
     const { phone_number, device_id } = req.body;
@@ -279,7 +282,7 @@ app.post('/api/login', async (req, res) => {
         } 
         
         if (user.device_id !== device_id) {
-            console.warn('SECURITY ALERT: Device Mismatch for user, but bypassing for testing phase.');
+            console.warn(`SECURITY ALERT: Device Mismatch for ${user.name}, bypassing for testing phase.`);
         }
 
         res.json({ message: "Login Successful", user });
@@ -292,7 +295,6 @@ app.post('/api/login', async (req, res) => {
 
 // --- 3. SUPERVISOR COMMAND ROUTES ---
 
-// Registry: Optimized for 1.5L Workers
 app.get('/api/supervisor/workers', async (req, res) => {
     const { search = '', limit = 15, offset = 0 } = req.query;
     try {
@@ -308,7 +310,6 @@ app.get('/api/supervisor/workers', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Registry Connection Failed" }); }
 });
 
-// Operational Stats for Supervisor Dashboard
 app.get('/api/supervisor/stats', async (req, res) => {
     try {
         const total = await db.query("SELECT COUNT(*) FROM employees WHERE role = 'worker'");
@@ -322,7 +323,6 @@ app.get('/api/supervisor/stats', async (req, res) => {
 
 // --- 4. COMMON & FIELD OPERATIONS ---
 
-// UPDATED: Route /api/worker/:id with rigid subquery logic
 app.get('/api/worker/:id', async (req, res) => {
     try {
         const result = await db.query(`
@@ -337,7 +337,6 @@ app.get('/api/worker/:id', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Mainframe Error" }); }
 });
 
-// Attendance Check-in Logic (Retained: Geofence + Face Score)
 app.post('/api/attendance/checkin', async (req, res) => {
     const { employee_id, user_lat, user_lng, face_score } = req.body;
     try {
@@ -358,7 +357,6 @@ app.post('/api/attendance/checkin', async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Engine failure" }); }
 });
 
-// Random Ping Trigger
 app.post('/api/ping/trigger', async (req, res) => {
     const { employee_id } = req.body;
     try {
@@ -368,11 +366,9 @@ app.post('/api/ping/trigger', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Transmission Failed" }); }
 });
 
-// UPDATED: Route /api/ping/respond with Rigid Multi-Step Logic
 app.post('/api/ping/respond', async (req, res) => {
     const { employee_id, lat, lng } = req.body;
     try {
-        // Fetch current context
         const contextQuery = `
             SELECT e.integrity_score, w.lat as w_lat, w.lng as w_lng, w.radius_meters, p.sent_at, p.id as ping_id
             FROM employees e
@@ -395,20 +391,17 @@ app.post('/api/ping/respond', async (req, res) => {
         let scoreAdjustment = 0.5;
         let errorMessage = null;
 
-        // Step 1: Timer Check
         if (timeDiffMinutes > 10) {
             finalStatus = 'FAILED';
             scoreAdjustment = -2.0;
             errorMessage = 'Timeout Penalty Applied';
         } 
-        // Step 2 & 3: Geofence Check
         else if (distance > data.radius_meters) {
             finalStatus = 'FAILED';
             scoreAdjustment = -2.0;
             errorMessage = 'Geofence Violation';
         }
 
-        // Step 4 & 5: Update database and return updated user object
         await db.query(`UPDATE ping_logs SET status = $1, responded_at = NOW() WHERE id = $2`, [finalStatus, data.ping_id]);
         
         const updatedUser = await db.query(`
@@ -425,8 +418,8 @@ app.post('/api/ping/respond', async (req, res) => {
         res.json({ status: 'SUCCESS', message: 'Presence confirmed. Score increased.', user: updatedUser.rows[0] });
 
     } catch (err) {
-        console.error("Ping Response Engine Error:", err);
-        res.status(500).json({ error: "Signal Verification Failed" });
+        console.error("Ping Response Error:", err);
+        res.status(500).json({ error: "Verification Failed" });
     }
 });
 
@@ -439,12 +432,8 @@ app.post('/api/salary/release', async (req, res) => {
         await db.query('UPDATE employees SET current_otp = $1 WHERE id = $2', [otp, employee_id]);
         await db.query(`INSERT INTO salary_ledger (emp_id, amount, month_year, status) 
                         SELECT id, base_salary, 'Jan-2026', 'PENDING' FROM employees WHERE id = $1`, [employee_id]);
-        
         res.json({ message: "Authorized", otp_hint: otp });
-    } catch (err) { 
-        console.error("Payout SQL Error:", err);
-        res.status(500).json({ error: "Finance Engine Error" }); 
-    }
+    } catch (err) { res.status(500).json({ error: "Finance Engine Error" }); }
 });
 
 app.post('/api/salary/verify', async (req, res) => {
@@ -457,6 +446,41 @@ app.post('/api/salary/verify', async (req, res) => {
             res.json({ status: "PAID", message: "Treasury Release Successful." });
         } else { res.status(401).json({ message: "Invalid Key" }); }
     } catch (err) { res.status(500).send("Payment failed"); }
+});
+
+// --- 6. ADMIN STRATEGIC OVERLAY ---
+
+app.get('/api/admin/heatmap', async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                w.id, 
+                w.ward_name, 
+                w.lat, 
+                w.lng, 
+                w.radius_meters, 
+                AVG(e.integrity_score) as avg_integrity, 
+                COUNT(e.id) as staff_count 
+            FROM wards w 
+            LEFT JOIN employees e ON w.id = e.ward_id 
+            GROUP BY w.id
+        `;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Heatmap Fetch Error:", err);
+        res.status(500).json({ error: "Failed to generate strategic heatmap." });
+    }
+});
+
+app.post('/api/admin/trigger-rotation', async (req, res) => {
+    try {
+        const result = await executeRotation();
+        res.json(result);
+    } catch (err) {
+        console.error("Rotation Engine Error:", err);
+        res.status(500).json({ error: "Engine Lockdown: Rotation Failed" });
+    }
 });
 
 app.get('/check-db', async (req, res) => {

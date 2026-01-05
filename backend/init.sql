@@ -33,21 +33,23 @@ CREATE TABLE employees (
     base_salary     DECIMAL(10, 2) DEFAULT 25000.00,
     current_otp     VARCHAR(6) DEFAULT NULL,
     last_login      TIMESTAMPTZ DEFAULT NOW(),
-    device_id       VARCHAR(255) DEFAULT NULL
+    device_id       VARCHAR(255) DEFAULT NULL,
+    joined_at       DATE DEFAULT CURRENT_DATE, -- NEW: Track joining date
+    last_transfer_date DATE DEFAULT CURRENT_DATE -- NEW: Track last rotation
 );
 
 
 -- 4. ATTENDANCE LOGS: Immutable Security Ledger
 
 CREATE TABLE attendance_logs (
-    id              SERIAL PRIMARY KEY,
-    emp_id          INT REFERENCES employees(id) ON DELETE CASCADE,
-    check_in_time   TIMESTAMPTZ DEFAULT NOW(),
-    lat             DECIMAL(10, 8),
-    lng             DECIMAL(11, 8),
-    status          VARCHAR(20), -- 'SUCCESS' / 'BLOCKED'
+    id               SERIAL PRIMARY KEY,
+    emp_id           INT REFERENCES employees(id) ON DELETE CASCADE,
+    check_in_time    TIMESTAMPTZ DEFAULT NOW(),
+    lat              DECIMAL(10, 8),
+    lng              DECIMAL(11, 8),
+    status           VARCHAR(20), -- 'SUCCESS' / 'BLOCKED'
     face_match_score DECIMAL(5, 2),
-    fail_reason     TEXT
+    fail_reason      TEXT
 );
 
 
@@ -141,8 +143,18 @@ INSERT INTO attendance_logs (emp_id, status, face_match_score) VALUES
     (4, 'SUCCESS', 0.95);
 
 
+
 -- Set an active OTP for Rajesh (Testing purposes)
 
 UPDATE employees
 SET current_otp = '123456'
 WHERE id = 1;
+
+
+-- 🔄 SIMULATION: Set old transfer dates for ID 1 and 5 to test rotation logic
+UPDATE employees 
+SET last_transfer_date = '2022-01-01' 
+WHERE id IN (1, 5);
+
+INSERT INTO employees (name, role, ward_id, phone_number, base_salary, integrity_score, last_transfer_date) 
+VALUES ('Super Admin Commissioner', 'admin', 1, '1234567890', 250000.00, 100.00, CURRENT_DATE);
