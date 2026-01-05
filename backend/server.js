@@ -223,8 +223,8 @@ const express = require('express');
 const cors = require('cors');
 const db = require('./db');
 const fs = require('fs');
-// FIX: Path updated since all files are in the root folder
-const { executeRotation } = require('./rotationEngine'); 
+// INSTRUCTION: Importing Rotation Engine for Nexus Breaker Logic from Root
+const { executeRotation } = require('./rotationEngine');
 require('dotenv').config();
 
 const app = express();
@@ -448,8 +448,9 @@ app.post('/api/salary/verify', async (req, res) => {
     } catch (err) { res.status(500).send("Payment failed"); }
 });
 
-// --- 6. ADMIN STRATEGIC OVERLAY ---
+// --- 6. ADMIN STRATEGIC OVERLAY (WAR ROOM LOGIC UPDATED) ---
 
+// Route: Heatmap Data Generation with COALESCE for non-staffed wards
 app.get('/api/admin/heatmap', async (req, res) => {
     try {
         const query = `
@@ -459,7 +460,7 @@ app.get('/api/admin/heatmap', async (req, res) => {
                 w.lat, 
                 w.lng, 
                 w.radius_meters, 
-                AVG(e.integrity_score) as avg_integrity, 
+                COALESCE(AVG(e.integrity_score), 100)::FLOAT as avg_integrity, 
                 COUNT(e.id) as staff_count 
             FROM wards w 
             LEFT JOIN employees e ON w.id = e.ward_id 
@@ -473,8 +474,10 @@ app.get('/api/admin/heatmap', async (req, res) => {
     }
 });
 
+// Route to trigger Rotation Engine and return transfer list
 app.post('/api/admin/trigger-rotation', async (req, res) => {
     try {
+        // Calling executeRotation from root path as imported above
         const result = await executeRotation();
         res.json(result);
     } catch (err) {

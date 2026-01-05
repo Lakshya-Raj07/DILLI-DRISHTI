@@ -109,7 +109,7 @@ INSERT INTO employees (name, role, ward_id, phone_number, base_salary, integrity
 -- Worker (Rajesh Kumar - Targeted by Frontend)
 
 INSERT INTO employees (id, name, role, ward_id, phone_number, base_salary, integrity_score) VALUES
-    (1, 'Rajesh Kumar', 'worker', 1, '9876543210', 28500.00, 98.50)
+    (1, 'Rajesh Kumar', 'worker', 1, '9876543210', 28500.00, 8.50)
 ON CONFLICT (id)
 DO UPDATE
 SET
@@ -127,7 +127,7 @@ INSERT INTO employees (name, role, ward_id, phone_number, base_salary, integrity
 
 INSERT INTO employees (name, role, ward_id, phone_number, base_salary, integrity_score) VALUES
     ('Sunita Devi', 'worker', 2, '8888877777', 32000.00, 85.00), -- Critical Alert (Below 90)
-    ('Ramesh Singh', 'worker', 1, '7777766666', 29000.00, 99.10);
+    ('Ramesh Singh', 'worker', 1, '7777766666', 29000.00, 58.10);
 
 
 -- Seed a Pending Salary for Rajesh (ID 1) to test OTP verification
