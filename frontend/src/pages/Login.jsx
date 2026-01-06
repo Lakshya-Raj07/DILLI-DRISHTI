@@ -240,6 +240,13 @@ import { Lock, User, ShieldCheck, Landmark, Fingerprint, Info, CheckCircle2 } fr
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+const demoCredentials = [
+  { role: 'Commissioner (Admin)', level: '01', phone: '1234567890', pass: 'any' },
+  { role: 'Zonal Head', level: '02', phone: '8000000001', pass: 'any' },
+  { role: 'Supervisor', level: '03', phone: '9988776655', pass: 'any' },
+  { role: 'Worker', level: '04', phone: '9000000001', pass: 'any' }
+];
+
 const Login = ({ setUserRole }) => {
   const [role, setRole] = useState('worker');
   const [empId, setEmpId] = useState('');
@@ -368,6 +375,35 @@ const Login = ({ setUserRole }) => {
               <h3 className="text-3xl font-black text-[#1A2B4C] mb-2 tracking-tight">Access Gateway</h3>
               <p className="text-slate-500 text-sm font-medium">Provide your registered credentials for secure binding.</p>
             </div>
+            
+
+
+
+            <div className="mb-6 p-4 bg-blue-50/50 border-l-4 border-[#1A2B4C] rounded-r-2xl shadow-inner backdrop-blur-sm">
+            <p className="text-[10px] font-black text-blue-900 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+              <ShieldCheck size={14} className="text-blue-600" /> Evaluation Credentials
+              </p>
+              <div className="grid grid-cols-1 gap-2">
+                {demoCredentials.map((cred, idx) => (
+                  <div 
+                  key={idx} 
+                   onClick={() => {
+                    setEmpId(cred.phone);
+                    setPassword('mcd@demo'); // Auto-fills password
+                    }}
+                    className="group flex items-center justify-between bg-white/90 p-2.5 rounded-xl border border-blue-100 hover:border-[#1A2B4C] hover:shadow-md transition-all cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-black bg-[#1A2B4C] text-white px-1.5 py-0.5 rounded">L{cred.level}</span>
+                        <span className="text-[11px] font-bold text-slate-700">{cred.role}</span>
+                      </div>
+                        <code className="text-[11px] font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded group-hover:bg-[#1A2B4C] group-hover:text-white transition-colors">
+                          {cred.phone}
+                          </code>
+                      </div>
+                        ))}
+                  </div>
+                        <p className="text-[9px] text-slate-400 mt-2 text-center font-medium italic">Click any card to auto-fill identity.</p>
+                </div>
 
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="grid grid-cols-2 gap-3 mb-8">
