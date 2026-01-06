@@ -6,6 +6,8 @@ import {
   ShieldCheck, Activity, Database, LayoutGrid
 } from 'lucide-react';
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 const SupervisorDashboard = () => {
   const [workers, setWorkers] = useState([]);
   const [stats, setStats] = useState(null);
@@ -20,9 +22,9 @@ const SupervisorDashboard = () => {
     // Only show the loading spinner if it's NOT a silent background poll
     if (!isSilent) setLoading(true); 
     try {
-      const workerRes = await axios.get(`http://localhost:5000/api/supervisor/workers?search=${search}&offset=${page * 15}`);
+      const workerRes = await axios.get(`${API_URL}/api/supervisor/workers?search=${search}&offset=${page * 15}`);
       setWorkers(workerRes.data);
-      const statsRes = await axios.get('http://localhost:5000/api/supervisor/stats');
+      const statsRes = await axios.get(`${API_URL}/api/supervisor/stats`);
       setStats(statsRes.data);
     } catch (err) { 
       console.error("Sync Error: Mainframe unreachable"); 
@@ -48,7 +50,7 @@ const SupervisorDashboard = () => {
   const triggerAction = async (type, id) => {
     const url = type === 'ping' ? `/api/ping/trigger` : `/api/salary/release`;
     try {
-      const res = await axios.post(`http://localhost:5000${url}`, { employee_id: id });
+     const res = await axios.post(`${API_URL}${url}`, { employee_id: id });
       setStatusMsg({ 
         type: 'success', 
         text: type === 'ping' ? "Signal Transmitted!" : `Payout Authorized. Demo OTP: ${res.data.otp_hint}` 

@@ -10,6 +10,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 // Leaflet Icons Fix
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -30,8 +32,8 @@ const CommissionerDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const [workerRes, heatmapRes] = await Promise.all([
-        axios.get('http://localhost:5000/check-db'),
-        axios.get('http://localhost:5000/api/admin/heatmap')
+        axios.get(`${API_URL}/check-db`),
+        axios.get(`${API_URL}/api/admin/heatmap`)
       ]);
       setWorkers(workerRes.data);
       setHeatmapData(heatmapRes.data);
@@ -52,7 +54,7 @@ const CommissionerDashboard = () => {
     if (!window.confirm("CRITICAL COMMAND: Execute periodic rotation to break administrative nexuses?")) return;
     setRotating(true);
     try {
-      const res = await axios.post('http://localhost:5000/api/admin/trigger-rotation');
+      const res = await axios.post(`${API_URL}/api/admin/trigger-rotation`);
       setRotationResults(res.data.transfers);
       fetchDashboardData();
     } catch (err) {

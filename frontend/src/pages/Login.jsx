@@ -238,6 +238,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Lock, User, ShieldCheck, Landmark, Fingerprint, Info, CheckCircle2 } from 'lucide-react';
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 const Login = ({ setUserRole }) => {
   const [role, setRole] = useState('worker');
   const [empId, setEmpId] = useState('');
@@ -263,7 +265,7 @@ const Login = ({ setUserRole }) => {
 
     try {
       // Step 1: Backend Call
-      const response = await axios.post('http://localhost:5000/api/login', {
+      const response = await axios.post(`${API_URL}/api/login`, {
         phone_number: empId, 
         device_id: generatedId
       });

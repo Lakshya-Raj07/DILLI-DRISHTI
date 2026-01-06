@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { LayoutDashboard, Users, AlertTriangle, Map, RefreshCw } from 'lucide-react';
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 const ZonalDashboard = () => {
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -9,7 +11,7 @@ const ZonalDashboard = () => {
   const fetchZonalData = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('http://localhost:5000/check-db');
+      const res = await axios.get(`${API_URL}/check-db`);
       setWorkers(res.data);
     } catch (err) { console.error(err); }
     setLoading(false);

@@ -6,6 +6,8 @@ import {
   User, Briefcase, Map, ShieldCheck, Upload, LogOut 
 } from 'lucide-react';
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 const WorkerApp = () => {
   // Real dynamic data states
   const [employeeId] = useState(1); 
@@ -26,7 +28,7 @@ const WorkerApp = () => {
   // Fetch Worker Profile Dynamically
   const fetchWorkerProfile = async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/worker/${employeeId}`);
+      const res = await axios.get(`${API_URL}/api/worker/${employeeId}`);
       setWorkerData(res.data);
       if (!res.data.is_ping_active) setIsViolation(false);
     } catch (err) {
@@ -93,7 +95,7 @@ const WorkerApp = () => {
     setLoading(true);
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try {
-        const res = await axios.post('http://localhost:5000/api/attendance/checkin', {
+        const res = await axios.post(`${API_URL}/api/attendance/checkin`, {
           employee_id: employeeId,
           user_lat: pos.coords.latitude,
           user_lng: pos.coords.longitude,
@@ -118,7 +120,7 @@ const WorkerApp = () => {
     setLoading(true);
     navigator.geolocation.getCurrentPosition(async (pos) => {
       try {
-        const res = await axios.post('http://localhost:5000/api/ping/respond', {
+        const res = await axios.post(`${API_URL}/api/ping/respond`, {
           employee_id: employeeId,
           lat: pos.coords.latitude,
           lng: pos.coords.longitude
@@ -137,7 +139,7 @@ const WorkerApp = () => {
       }
     }, () => {
       // Fallback for auto-submit if GPS is denied or timeout
-      axios.post('http://localhost:5000/api/ping/respond', { employee_id: employeeId, lat: 0, lng: 0 })
+      axios.post(`${API_URL}/api/ping/respond`, { employee_id: employeeId, lat: 0, lng: 0 })
            .then(() => fetchWorkerProfile());
       setLoading(false);
     });
@@ -160,7 +162,7 @@ const WorkerApp = () => {
     setVerifyingOtp(true);
     try {
       const finalOtp = otp.join('');
-      await axios.post('http://localhost:5000/api/salary/verify', {
+      await axios.post(`${API_URL}/api/salary/verify`, {
         employee_id: employeeId,
         otp: finalOtp
       });
